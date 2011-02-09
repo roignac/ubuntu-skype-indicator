@@ -1,0 +1,25 @@
+Source: indicator-skype
+Section: python
+Priority: extra
+Build-Depends: cdbs (>= 0.4.43),
+ debhelper (>= 6),
+ python,
+ python-support (>= 0.6.4),
+ python-distutils-extra (>= 2.10)
+Maintainer: Vadim Rutkovsky <roignac@gmail.com>
+Standards-Version: 3.8.3
+XS-Python-Version: current
+
+Package: indicator-skype
+Architecture: all
+XB-Python-Version: ${python:Versions}
+Depends: ${misc:Depends},
+ ${python:Depends},
+ python-appindicator,
+ python-skype,
+ python-gconf,
+ python-notify,
+ python-gobject,
+ python-gtk2,
+Description: A skype indicator for Ubuntu's Messages Applet
+ This indicator plugin allows you to view your skype missed chats and missed calls in your system wide messaging indicator

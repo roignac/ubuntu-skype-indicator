@@ -1,0 +1,9 @@
+[Desktop Entry]
+_Name=Skype Indicator
+_Comment=A skype indicator for Ubuntu's Messages Applet
+GenericName=Skype Indicator
+Categories=GNOME;
+Exec=indicator-skype
+Icon=/usr/share/pixmaps/skype.png
+Terminal=false
+Type=Application
