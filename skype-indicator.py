@@ -34,13 +34,14 @@ import Skype4Py
 import urllib
 import os
 import time
+import glob
 
 class notification:
 	notif_type = None
 	handle = None
 	name = None
 	msg = None
-	count = 0
+	count = -1
 	timestamp = None
 	indicator = None
 	avatar_path = None
@@ -69,7 +70,7 @@ class notification:
 		}.get(self.notif_type)(self.handle)
 
 		# Create an avatar
-		self.create_avatar(self.name)
+		self.find_avatar_for_handle(self.handle)
 
 	def ellipsis(self, name):
 		""" Add an ellipsis after ellipsis_length symbols if name is too long """
@@ -111,13 +112,57 @@ class notification:
 			call_name += "%s," % participant.DisplayName
 		return self.ellipsis(call_name)
 
-	def create_avatar(self, name):
-		""" create an avatar from avatar_data """
-		h=hashlib.md5(name).hexdigest()
+	def find_avatar_for_handle(self, handle):
+		if self.notif_type == 'message':
+			data_file_part = 'user'
+			magic_key = "\x03\x10"
+		elif self.notif_type == 'chat':
+			data_file_part = 'chat'
+			magic_key = "\x03"
+		h=hashlib.md5(handle).hexdigest()
 		self.avatar_file=os.path.join(avatar_directory, "%s.jpg" % str(h))
-		urllib.urlretrieve('http://friedcellcollective.net/monsterid/monster/%s/64' % h, self.avatar_file)
+		if not os.path.exists(self.avatar_file):
+			#Try to get user data from files in ~/.Skype
+			data_files = glob.glob(os.path.join(os.path.expanduser("~/.Skype"), current_user_name, "%s*.dbb" % data_file_part))
+			for data_file in data_files:
+				#Open file and seek for magic_key+handle combination
+				file = open(data_file,'r')
+				file_contents = file.read()
+				file.close()
+				position = file_contents.find(magic_key + handle)
+				if position != -1:
+					self.grab_avatar_from_file(data_file, position, handle)
+
+		# If file has not bveen create, give up and generate the avatar
+		if not os.path.exists(self.avatar_file):
+			urllib.urlretrieve('http://friedcellcollective.net/monsterid/monster/%s/64' % h, self.avatar_file)
 		self.pixbuf=gtk.gdk.pixbuf_new_from_file(self.avatar_file)
 		return self.avatar_file
+
+	def grab_avatar_from_file(self, full_path, position, handle):
+		""" create an avatar from avataprir_data """
+		#Open file and read the whole file
+		file = open(full_path,'r')
+		file_contents = file.read()
+		file.close()
+		#Find the nearest l33l block to 'position'
+		leel_block_start_position = file_contents.find("l33l", 0, position)
+		while leel_block_start_position != -1:
+			old_start_position = leel_block_start_position
+			leel_block_start_position = file_contents.find("l33l", leel_block_start_position+1, position)
+		leel_block_start_position = old_start_position
+		#Find the end of l33l block
+		leel_block_end_position = file_contents.find("l33l", leel_block_start_position+1)
+		# Seek for JPEG block within l33l block
+		jpeg_start_position = file_contents.find("\xff\xd8", leel_block_start_position, leel_block_end_position)
+		if jpeg_start_position != -1:
+			jpeg_end_position = file_contents.find("\xff\xd9", jpeg_start_position, leel_block_end_position)
+			if jpeg_end_position != -1:
+				avatar_data=file_contents[jpeg_start_position:jpeg_end_position+2]
+				avatar = open(self.avatar_file,'w')
+				avatar.write(avatar_data)
+				avatar.flush()
+				avatar.close()
 
 	def get_timestamp_of_last_missed_message(self, handle):
 		"""getting a timestamp of last missed message"""
@@ -134,7 +179,6 @@ class notification:
 
 	def create_indicator(self):
 		""" Create a new active indicator """
-		#print "--- Creating an indicator entry: '%s', count: %s, timestamp: %s, avatar: %s" % (self.name, self.count, self.timestamp, self.avatar_path)
 		self.indicator = indicate.Indicator()
 		self.indicator.set_property("subtype", "im")
 		self.indicator.set_property("sender", self.name)
@@ -170,8 +214,6 @@ class notification:
 		#Destroy the object by setting handle to None - will be removed during append_notification call
 		self.handle = None
 
-		#print "---Displaying skype window for %s with handle '%s'" % (self.notif_type, self.handle)
-
 	def display_user(self, handle):
 		self.skype.Client.OpenMessageDialog(handle)
 
@@ -205,6 +247,9 @@ class skypeIndicator:
 			print "Please open skype first"
 			self.noSkype()
 
+		#Get current username
+		global current_user_name
+		current_user_name = self.skype.CurrentUserHandle
 		#create notification icon
 		self.create_server()
 		#Setting event callbacks
@@ -222,7 +267,6 @@ class skypeIndicator:
 
 	def create_server(self):
 		""" Create a new Skype notification server """
-		#print "Registering a service"
 		#Create a notification server
 		self.server = indicate.indicate_server_ref_default()
 		self.server.set_type("message.im")
@@ -263,7 +307,6 @@ class skypeIndicator:
 		for notification in self.notifications:
 			# Removing notifications with handle None
 			if notification.handle == None:
-				print "Removed notification"
 				del self.notifications[self.notifications.index(notification)]
 			if ((notification.handle == new_notification.handle) and (notification.notif_type == new_notification.notif_type)):
 				notification.update_count()
@@ -279,6 +322,9 @@ if __name__ == "__main__":
 	#Global variables
 	avatar_directory = None
 	ellipsis_length = 30
+	user_files = ["user256", "user1024", "user4096", "user16384", "user32768"]
+	chat_files = ["chat256", "chat1024", "chat4096", "chat16384", "chat32768"]
+	current_user_name = None
 
 	#Prepare a variable to store avatars. Check that avatar dir exists, otherwise - create it
 	avatar_directory = os.path.expanduser("~/.cache/ubuntu-skype-indicator")
